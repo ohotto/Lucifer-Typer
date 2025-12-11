@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lucifer的打字训练台</title>
+    <style>
+        :root {
+            /* 更加深邃精致的暗色径向渐变背景 */
+            --bg-gradient: radial-gradient(circle at 50% 30%, #2b323c 0%, #111317 100%);
+            
+            --surface-color: rgba(255, 255, 255, 0.05);
+            --primary-color: #3b82f6; /* 亮蓝 */
+            --primary-hover: #2563eb;
+            --danger-color: #ef4444;  /* 红色 */
+            --text-main: #f3f4f6;
+            --text-sub: #9ca3af;
+            --glass-border: 1px solid rgba(255, 255, 255, 0.08);
+            --shadow-lg: 0 10px 30px -5px rgba(0, 0, 0, 0.6);
+        }
+
+        * { box-sizing: border-box; user-select: none; }
+
+        /* 移除按钮点击后的默认黑框 */
+        button:focus { outline: none; }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background: var(--bg-gradient);
+            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* --- 标题 --- */
+        #app-title {
+            position: absolute;
+            top: 25px;
+            left: 40px;
+            font-size: 1.8rem;
+            font-weight: 800;
+            margin: 0;
+            background: linear-gradient(to right, #60a5fa, #c084fc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: 1px;
+            z-index: 20;
+            text-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            pointer-events: none;
+        }
+
+        /* --- 顶部 HUD --- */
+        #hud {
+            position: absolute;
+            top: 30px;
+            left: 50%;
+            transform: translateX(-50%); 
+            
+            display: flex;
+            gap: 40px;
+            padding: 10px 40px;
+            background: rgba(20, 20, 25, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-radius: 50px;
+            border: var(--glass-border);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+            
+            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s;
+            z-index: 10;
+        }
+        
+        #hud.hidden { 
+            transform: translateX(-50%) translateY(-200%); 
+            opacity: 0;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 60px;
+        }
+        
+        .stat-label { font-size: 0.7rem; color: var(--text-sub); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 2px; }
+        .stat-value { font-size: 1.4rem; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-main); }
+
+        /* --- 游戏主区域 --- */
+        #game-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            position: relative;
+        }
+
+        .word-wrapper {
+            position: relative;
+            height: 140px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #current-word {
+            font-size: 5.5rem;
+            font-weight: 600;
+            letter-spacing: 4px;
+            z-index: 2;
+            display: flex;
+            text-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+
+        .ghost-word {
+            position: absolute;
+            font-size: 5.5rem;
+            font-weight: 600;
+            letter-spacing: 4px;
+            pointer-events: none;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .char { color: #4b5563; transition: color 0.1s; position: relative; }
+        .char.correct { color: var(--primary-color); text-shadow: 0 0 20px rgba(59, 130, 246, 0.6); }
+        .char.wrong { color: var(--danger-color); }
+        .char.active::after {
+            content: ''; position: absolute; left: 0; bottom: 5px; width: 100%; height: 4px;
+            background: var(--text-main); border-radius: 2px;
+            animation: pulse 1s infinite;
+            box-shadow: 0 0 8px rgba(255,255,255,0.5);
+        }
+
+        @keyframes pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+
+        .anim-slide-up { animation: slideUpFade 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+        @keyframes slideUpFade { to { transform: translate(-50%, -150%); opacity: 0; } }
+
+        #queue-area {
+            margin-top: 30px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            opacity: 0.25;
+            transition: opacity 0.3s;
+            height: 80px; 
+        }
+
+        .queue-item {
+            font-size: 2rem;
+            font-weight: 500;
+            line-height: 1.2;
+            color: var(--text-sub);
+        }
+
+        /* --- 设置面板 --- */
+        #settings-panel {
+            position: absolute;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 25px;
+            z-index: 5;
+            transition: opacity 0.3s, transform 0.3s;
+        }
+        
+        #settings-panel.hidden { opacity: 0; pointer-events: none; transform: scale(0.95); }
+
+        .segmented-control {
+            background: rgba(0,0,0,0.2);
+            padding: 4px;
+            border-radius: 12px;
+            display: flex;
+            position: relative;
+            border: var(--glass-border);
+        }
+        
+        .mode-option {
+            padding: 10px 24px;
+            cursor: pointer;
+            z-index: 2;
+            color: var(--text-sub);
+            transition: color 0.3s;
+            font-weight: 500;
+            font-size: 0.95rem;
+        }
+        
+        .mode-option.active { color: #fff; }
+        
+        /* 修复：将 left 从 4px 改为 0 */
+        .segmented-bg {
+            position: absolute;
+            top: 4px; 
+            left: 0; /* 修改处：设为0，由JS transform全权控制偏移 */
+            bottom: 4px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 8px;
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s;
+            z-index: 1;
+        }
+
+        .slider-group {
+            width: 340px;
+            background: rgba(0,0,0,0.2);
+            padding: 25px;
+            border-radius: 20px;
+            border: var(--glass-border);
+        }
+        
+        .slider-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        
+        .slider-label { font-size: 0.9rem; color: var(--text-sub); }
+        
+        .slider-input {
+            width: 60px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: var(--primary-color);
+            border-radius: 6px;
+            padding: 4px 8px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 1rem;
+        }
+        .slider-input:focus { outline: none; border-color: var(--primary-color); }
+
+        input[type=range] {
+            width: 100%; -webkit-appearance: none; background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none; height: 18px; width: 18px; border-radius: 50%;
+            background: var(--primary-color); margin-top: -7px; cursor: pointer;
+            box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+            transition: transform 0.1s;
+        }
+        input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.2); }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%; height: 4px; cursor: pointer; background: rgba(255,255,255,0.1); border-radius: 2px;
+        }
+
+        .hidden-group { display: none; }
+
+        /* --- 底部控制栏 --- */
+        #bottom-bar {
+            position: fixed;
+            bottom: 0;
+            width: 100%;
+            padding: 20px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 100%);
+            z-index: 20;
+        }
+
+        .shortcut-hints {
+            display: flex;
+            gap: 20px;
+            font-size: 0.85rem;
+            color: var(--text-sub);
+        }
+        
+        .key {
+            background: rgba(255,255,255,0.1);
+            padding: 3px 8px;
+            border-radius: 5px;
+            font-family: 'Menlo', 'Monaco', monospace;
+            color: var(--text-main);
+            margin-right: 6px;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .checkbox-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--text-sub);
+            font-size: 0.9rem;
+            cursor: pointer;
+            padding: 5px 10px;
+            border-radius: 8px;
+            transition: background 0.2s;
+        }
+        .checkbox-wrapper:hover { background: rgba(255,255,255,0.05); }
+        .checkbox-wrapper input { accent-color: var(--text-sub); cursor: pointer; width: 16px; height: 16px;}
+
+        /* --- 主按钮 --- */
+        #action-btn {
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            border: none;
+            background-color: var(--primary-color);
+            color: white;
+            cursor: pointer;
+            box-shadow: 0 0 30px rgba(59, 130, 246, 0.4);
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 30;
+        }
+
+        #action-btn:hover { transform: translateX(-50%) scale(1.1); box-shadow: 0 0 40px rgba(59, 130, 246, 0.6); }
+        
+        #action-btn.running {
+            background-color: var(--danger-color);
+            border-radius: 16px;
+            transform: translateX(-50%) rotate(180deg);
+            box-shadow: 0 0 30px rgba(239, 68, 68, 0.4);
+        }
+        #action-btn.running:hover { box-shadow: 0 0 40px rgba(239, 68, 68, 0.6); }
+        
+        .icon-play, .icon-stop { width: 28px; height: 28px; fill: currentColor; }
+        .running .icon-play { display: none; }
+        .icon-stop { display: none; }
+        .running .icon-stop { display: block; }
+
+        /* --- 结果页 --- */
+        #result-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.85);
+            backdrop-filter: blur(8px);
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            z-index: 50; opacity: 0; pointer-events: none; transition: opacity 0.3s;
+        }
+        #result-overlay.visible { opacity: 1; pointer-events: auto; }
+        
+        .result-card {
+            background: #1f232b; padding: 50px; border-radius: 24px; text-align: center;
+            border: var(--glass-border); box-shadow: var(--shadow-lg); width: 440px;
+        }
+        .result-big { font-size: 5rem; color: var(--primary-color); font-weight: 800; margin: 10px 0; line-height: 1; text-shadow: 0 0 30px rgba(59,130,246,0.3); }
+        .result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 25px; margin-top: 40px; text-align: left; }
+        .res-item { color: var(--text-sub); font-size: 1rem; }
+        .res-item span { color: var(--text-main); font-weight: bold; float: right; font-size: 1.2rem; }
+
+        .result-actions {
+            display: flex;
+            gap: 15px;
+            margin-top: 40px;
+            width: 100%;
+        }
+
+        .btn-res {
+            flex: 1;
+            padding: 14px 0;
+            border-radius: 12px;
+            border: 1px solid rgba(255,255,255,0.1);
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-home {
+            background: rgba(255,255,255,0.05);
+            color: var(--text-main);
+        }
+        .btn-home:hover { background: rgba(255,255,255,0.1); }
+
+        .btn-restart {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+        .btn-restart:hover { background: var(--primary-hover); box-shadow: 0 5px 15px rgba(59, 130, 246, 0.4); }
+
+        .btn-res:active { transform: scale(0.98); }
+
+        .shortcut-tip {
+            display: block;
+            font-size: 0.75rem;
+            opacity: 0.6;
+            margin-top: 4px;
+            font-weight: normal;
+            font-family: monospace;
+        }
+
+    </style>
+</head>
+<body>
+
+    <h1 id="app-title">Lucifer的打字训练台</h1>
+
+    <!-- HUD -->
+    <div id="hud" class="hidden">
+        <div class="stat-item">
+            <span class="stat-label">模式</span>
+            <span class="stat-value" id="hud-mode-text">计时</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label" id="hud-main-label">时间</span>
+            <span class="stat-value" id="hud-main-val">30</span>
+        </div>
+        <div class="stat-item">
+            <span class="stat-label">正确率 (词)</span>
+            <span class="stat-value" id="hud-acc">100%</span>
+        </div>
+    </div>
+
+    <!-- 游戏区 -->
+    <div id="game-container">
+        <div class="word-wrapper">
+            <div id="current-word"></div>
+        </div>
+        <!-- 竖排队列 -->
+        <div id="queue-area">
+            <span class="queue-item" id="next-1"></span>
+            <span class="queue-item" id="next-2"></span>
+        </div>
+        
+        <!-- 设置面板 -->
+        <div id="settings-panel">
+            <div class="segmented-control" id="mode-control">
+                <div class="segmented-bg" id="mode-bg"></div>
+                <div class="mode-option active" data-value="timed">计时模式</div>
+                <div class="mode-option" data-value="count">计数模式</div>
+                <div class="mode-option" data-value="endless">无尽模式</div>
+            </div>
+
+            <div class="slider-group" id="group-time">
+                <div class="slider-header">
+                    <span class="slider-label">时间限制 (秒)</span>
+                    <input type="number" class="slider-input" id="input-time" value="30">
+                </div>
+                <input type="range" id="range-time" min="10" max="300" step="10" value="30">
+                <div style="display:flex; justify-content:space-between; margin-top:5px; font-size:0.7rem; color:var(--text-sub);">
+                    <span>10s</span><span>300s</span>
+                </div>
+            </div>
+
+            <div class="slider-group hidden-group" id="group-count">
+                <div class="slider-header">
+                    <span class="slider-label">词数限制 (个)</span>
+                    <input type="number" class="slider-input" id="input-count" value="50">
+                </div>
+                <input type="range" id="range-count" min="10" max="200" step="10" value="50">
+                <div style="display:flex; justify-content:space-between; margin-top:5px; font-size:0.7rem; color:var(--text-sub);">
+                    <span>10</span><span>200</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主按钮 -->
+    <button id="action-btn">
+        <svg class="icon-play" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+        <svg class="icon-stop" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>
+    </button>
+
+    <!-- 底部 -->
+    <div id="bottom-bar">
+        <div class="shortcut-hints">
+            <span><span class="key">Space</span>确认</span>
+            <span><span class="key">Enter</span>开始/停止</span>
+            <span><span class="key">Shift + Enter</span>重来</span>
+            <span><span class="key">Esc</span>清空</span>
+        </div>
+        <label class="checkbox-wrapper">
+            <input type="checkbox" id="allow-backspace" checked>
+            允许回删
+        </label>
+    </div>
+
+    <!-- 结果页 -->
+    <div id="result-overlay">
+        <div class="result-card">
+            <div style="color:var(--text-sub); font-size:0.9rem;">正确率 (词)</div>
+            <div class="result-big" id="res-acc">0%</div>
+            <div class="result-grid">
+                <div class="res-item">总耗时 <span id="res-time">0s</span></div>
+                <div class="res-item">完成数 <span id="res-count">0</span></div>
+                <div class="res-item">WPM <span id="res-wpm">0</span></div>
+                <div class="res-item">错误词数 <span id="res-error" style="color:var(--danger-color)">0</span></div>
+            </div>
+            <div class="result-actions">
+                <button class="btn-res btn-home" id="btn-home">
+                    返回主页
+                    <span class="shortcut-tip">Home</span>
+                </button>
+                <button class="btn-res btn-restart" id="btn-restart-res">
+                    重新开始
+                    <span class="shortcut-tip">Shift + Enter</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+<script>
+    const pinyinDB = [
+            // 零声母音节
+            "a", "ai", "an", "ang", "ao",
+            "e", "ei", "en", "eng", "er",
+            "o", "ou",
+            // 零声母整体认读音节 (Y, W 开头)
+            "yi", "ya", "yao", "ye", "yin", "ying", "yo", "yong", "you", "yu", "yuan", "yue", "yun",
+            "wu", "wa", "wai", "wan", "wang", "wei", "wen", "weng", "wo",
+
+            // 声母 b
+            "ba", "bai", "ban", "bang", "bao", "bei", "ben", "beng", "bi", "bian", "biao", "bie", "bin", "bing", "bo", "bu",
+            // 声母 p
+            "pa", "pai", "pan", "pang", "pao", "pei", "pen", "peng", "pi", "pian", "piao", "pie", "pin", "ping", "po", "pou", "pu",
+            // 声母 m
+            "ma", "mai", "man", "mang", "mao", "mei", "men", "meng", "mi", "mian", "miao", "mie", "min", "ming", "mo", "mou", "mu",
+            // 声母 f
+            "fa", "fan", "fang", "fei", "fen", "feng", "fo", "fou", "fu",
+
+            // 声母 d
+            "da", "dai", "dan", "dang", "dao", "de", "deng", "di", "dian", "diao", "die", "ding", "diu", "dong", "dou", "du", "duan", "dui", "dun", "duo",
+            // 声母 t
+            "ta", "tai", "tan", "tang", "tao", "te", "teng", "ti", "tian", "tiao", "tie", "ting", "tong", "tou", "tu", "tuan", "tui", "tun", "tuo",
+            // 声母 n
+            "na", "nai", "nan", "nang", "nao", "ne", "nei", "nen", "neng", "ni", "nian", "niang", "niao", "nie", "nin", "ning", "niu", "nong", "nu", "nuan", "nuo", "nv", "nue",
+            // 声母 l
+            "la", "lai", "lan", "lang", "lao", "le", "lei", "leng", "li", "lia", "lian", "liang", "liao", "lie", "lin", "ling", "liu", "lo", "long", "lou", "lu", "luan", "lun", "luo", "lv", "lue",
+
+            // 声母 g
+            "ga", "gai", "gan", "gang", "gao", "ge", "gei", "gen", "geng", "gong", "gou", "gu", "gua", "guai", "guan", "guang", "gui", "gun", "guo",
+            // 声母 k
+            "ka", "kai", "kan", "kang", "kao", "ke", "ken", "keng", "kong", "kou", "ku", "kua", "kuai", "kuan", "kuang", "kui", "kun", "kuo",
+            // 声母 h
+            "ha", "hai", "han", "hang", "hao", "he", "hei", "hen", "heng", "hong", "hou", "hu", "hua", "huai", "huan", "huang", "hui", "hun", "huo",
+
+            // 声母 j (j后面直接接 i, iu, iong 系列；ü 系列写成 u)
+            "ji", "jia", "jian", "jiang", "jiao", "jie", "jin", "jing", "jiong", "jiu", "ju", "juan", "jue", "jun",
+            // 声母 q (q后面直接接 i, iu, iong 系列；ü 系列写成 u)
+            "qi", "qia", "qian", "qiang", "qiao", "qie", "qin", "qing", "qiong", "qiu", "qu", "quan", "que", "qun",
+            // 声母 x (x后面直接接 i, iu, iong 系列；ü 系列写成 u)
+            "xi", "xia", "xian", "xiang", "xiao", "xie", "xin", "xing", "xiong", "xiu", "xu", "xuan", "xue", "xun",
+
+            // 声母 zh (zh后面接 i 是整体认读音节)
+            "zha", "zhai", "zhan", "zhang", "zhao", "zhe", "zhen", "zheng", "zhi", "zhong", "zhou", "zhu", "zhua", "zhuai", "zhuan", "zhuang", "zhui", "zhun", "zhuo",
+            // 声母 ch (ch后面接 i 是整体认读音节)
+            "cha", "chai", "chan", "chang", "chao", "che", "chen", "cheng", "chi", "chong", "chou", "chu", "chuai", "chuan", "chuang", "chui", "chun", "chuo",
+            // 声母 sh (sh后面接 i 是整体认读音节)
+            "sha", "shai", "shan", "shang", "shao", "she", "shei", "shen", "sheng", "shi", "shou", "shu", "shua", "shuai", "shuan", "shuang", "shui", "shun", "shuo",
+            // 声母 r (r后面接 i 是整体认读音节)
+            "ran", "rang", "rao", "re", "ren", "reng", "ri", "rong", "rou", "ru", "ruan", "rui", "run", "ruo",
+
+            // 声母 z (z后面接 i 是整体认读音节)
+            "za", "zai", "zan", "zang", "zao", "ze", "zei", "zen", "zeng", "zi", "zong", "zou", "zu", "zuan", "zui", "zun", "zuo",
+            // 声母 c (c后面接 i 是整体认读音节)
+            "ca", "cai", "can", "cang", "cao", "ce", "cen", "ceng", "ci", "cong", "cou", "cu", "cuan", "cui", "cun", "cuo",
+            // 声母 s (s后面接 i 是整体认读音节)
+            "sa", "sai", "san", "sang", "sao", "se", "sen", "seng", "si", "song", "sou", "su", "suan", "sui", "sun", "suo"
+        ];
+
+    class App {
+        constructor() {
+            this.state = {
+                running: false,
+                mode: 'timed',
+                queue: [],
+                currentWord: "",
+                input: "",
+                startTime: 0,
+                timer: null,
+                stats: {
+                    completedWords: 0,
+                    correctKeystrokes: 0, 
+                    wrongWords: 0 
+                }
+            };
+
+            this.dom = {
+                hud: document.getElementById('hud'),
+                settings: document.getElementById('settings-panel'),
+                gameContainer: document.getElementById('game-container'),
+                currentWord: document.getElementById('current-word'),
+                wordWrapper: document.querySelector('.word-wrapper'),
+                btn: document.getElementById('action-btn'),
+                result: document.getElementById('result-overlay'),
+                modeOpts: document.querySelectorAll('.mode-option'),
+                modeBg: document.getElementById('mode-bg'),
+                timeGroup: document.getElementById('group-time'),
+                countGroup: document.getElementById('group-count'),
+                rangeTime: document.getElementById('range-time'),
+                inputTime: document.getElementById('input-time'),
+                rangeCount: document.getElementById('range-count'),
+                inputCount: document.getElementById('input-count'),
+                backspace: document.getElementById('allow-backspace'),
+                next1: document.getElementById('next-1'),
+                next2: document.getElementById('next-2')
+            };
+
+            this.bindEvents();
+            this.updateModeUI('timed');
+        }
+
+        bindEvents() {
+            this.dom.modeOpts.forEach(opt => {
+                opt.addEventListener('click', () => {
+                    if (this.state.running) return;
+                    this.updateModeUI(opt.dataset.value);
+                });
+            });
+
+            this.syncInput(this.dom.rangeTime, this.dom.inputTime);
+            this.syncInput(this.dom.rangeCount, this.dom.inputCount);
+
+            this.dom.btn.addEventListener('click', (e) => {
+                this.toggleGame();
+                e.currentTarget.blur();
+            });
+            
+            document.getElementById('btn-home').addEventListener('click', (e) => {
+                this.stopGame(true);
+                e.currentTarget.blur();
+            });
+            
+            document.getElementById('btn-restart-res').addEventListener('click', (e) => {
+                this.startGame();
+                e.currentTarget.blur();
+            });
+
+            document.addEventListener('keydown', (e) => this.handleKey(e));
+        }
+
+        syncInput(range, input) {
+            range.addEventListener('input', () => input.value = range.value);
+            input.addEventListener('input', () => range.value = input.value);
+        }
+
+        updateModeUI(mode) {
+            this.state.mode = mode;
+            const activeOpt = Array.from(this.dom.modeOpts).find(o => o.dataset.value === mode);
+            this.dom.modeOpts.forEach(o => o.classList.remove('active'));
+            activeOpt.classList.add('active');
+            
+            this.dom.modeBg.style.width = activeOpt.offsetWidth + 'px';
+            this.dom.modeBg.style.transform = `translateX(${activeOpt.offsetLeft}px)`;
+
+            if (mode === 'timed') {
+                this.dom.timeGroup.classList.remove('hidden-group');
+                this.dom.countGroup.classList.add('hidden-group');
+            } else if (mode === 'count') {
+                this.dom.timeGroup.classList.add('hidden-group');
+                this.dom.countGroup.classList.remove('hidden-group');
+            } else {
+                this.dom.timeGroup.classList.add('hidden-group');
+                this.dom.countGroup.classList.add('hidden-group');
+            }
+        }
+
+        toggleGame() {
+            if (this.state.running) {
+                if (this.state.mode === 'endless') {
+                    this.stopGame(false);
+                } else {
+                    this.stopGame(true);
+                }
+            } else {
+                this.startGame();
+            }
+        }
+
+        startGame() {
+            this.state.running = true;
+            this.dom.settings.classList.add('hidden');
+            this.dom.hud.classList.remove('hidden');
+            this.dom.result.classList.remove('visible');
+            this.dom.btn.classList.add('running');
+            
+            this.state.stats = { 
+                completedWords: 0, 
+                correctKeystrokes: 0, 
+                wrongWords: 0 
+            };
+            this.state.input = "";
+            this.state.startTime = Date.now();
+            
+            const labelMap = { 'timed': '时间', 'count': '进度', 'endless': '耗时' };
+            const modeName = { 'timed': '计时模式', 'count': '计数模式', 'endless': '无尽模式' };
+            document.getElementById('hud-main-label').innerText = labelMap[this.state.mode];
+            document.getElementById('hud-mode-text').innerText = modeName[this.state.mode];
+            
+            this.updateStats();
+
+            this.state.queue = [];
+            for(let i=0; i<50; i++) this.addToQueue();
+            
+            this.nextWord(true);
+            
+            if (this.state.timer) clearInterval(this.state.timer);
+            this.state.timer = setInterval(() => this.tick(), 100);
+        }
+
+        stopGame(manual = true) {
+            this.state.running = false;
+            clearInterval(this.state.timer);
+            this.dom.btn.classList.remove('running');
+            
+            this.dom.next1.innerText = "";
+            this.dom.next2.innerText = "";
+
+            if (manual) {
+                this.dom.settings.classList.remove('hidden');
+                this.dom.hud.classList.add('hidden');
+                this.dom.currentWord.innerHTML = "";
+                this.dom.result.classList.remove('visible');
+            } else {
+                this.showResult();
+            }
+        }
+
+        showResult() {
+            this.dom.hud.classList.add('hidden');
+            const stats = this.state.stats;
+            const elapsed = (Date.now() - this.state.startTime) / 1000;
+            const min = elapsed / 60;
+            
+            const wpm = min > 0 ? Math.round((stats.correctKeystrokes / 5) / min) : 0;
+            
+            let acc = 0;
+            if (stats.completedWords > 0) {
+                acc = Math.max(0, Math.round(((stats.completedWords - stats.wrongWords) / stats.completedWords) * 100));
+            }
+
+            document.getElementById('res-acc').innerText = acc + "%";
+            document.getElementById('res-acc').style.color = acc >= 90 ? '#3b82f6' : (acc >= 60 ? '#facc15' : '#ef4444');
+            document.getElementById('res-time').innerText = elapsed.toFixed(1) + 's';
+            document.getElementById('res-count').innerText = stats.completedWords;
+            document.getElementById('res-wpm').innerText = wpm;
+            
+            document.getElementById('res-error').innerText = stats.wrongWords;
+
+            this.dom.result.classList.add('visible');
+        }
+
+        addToQueue() {
+            this.state.queue.push(pinyinDB[Math.floor(Math.random() * pinyinDB.length)]);
+        }
+
+        nextWord(init = false) {
+            if (!init) {
+                this.state.stats.completedWords++;
+                if (this.state.mode === 'count') {
+                    const limit = parseInt(this.dom.inputCount.value);
+                    if (this.state.stats.completedWords >= limit) {
+                        this.stopGame(false);
+                        return;
+                    }
+                }
+            }
+
+            if (this.state.queue.length < 10) {
+                for(let i=0; i<10; i++) this.addToQueue();
+            }
+            
+            this.state.currentWord = this.state.queue.shift();
+            this.state.input = "";
+            this.render();
+            this.updateQueueUI();
+        }
+
+        tick() {
+            const now = Date.now();
+            const elapsed = (now - this.state.startTime) / 1000;
+            const valEl = document.getElementById('hud-main-val');
+
+            if (this.state.mode === 'timed') {
+                const limit = parseInt(this.dom.inputTime.value);
+                const remain = Math.max(0, limit - elapsed);
+                valEl.innerText = remain.toFixed(1);
+                if (remain <= 0) this.stopGame(false);
+            } else if (this.state.mode === 'count') {
+                const limit = parseInt(this.dom.inputCount.value);
+                valEl.innerText = `${this.state.stats.completedWords} / ${limit}`;
+            } else {
+                valEl.innerText = elapsed.toFixed(1);
+            }
+        }
+
+        render() {
+            const word = this.state.currentWord;
+            const input = this.state.input;
+            let html = '';
+            
+            for (let i = 0; i < word.length; i++) {
+                let cls = 'char';
+                if (i < input.length) {
+                    cls += input[i] === word[i] ? ' correct' : ' wrong';
+                }
+                if (i === input.length) cls += ' active';
+                html += `<span class="${cls}">${word[i]}</span>`;
+            }
+            this.dom.currentWord.innerHTML = html;
+        }
+
+        updateQueueUI() {
+            this.dom.next1.innerText = this.state.queue[0] || '';
+            this.dom.next2.innerText = this.state.queue[1] || '';
+        }
+
+        updateStats() {
+            const s = this.state.stats;
+            let acc = 100;
+            if (s.completedWords > 0) {
+                acc = Math.max(0, Math.round(((s.completedWords - s.wrongWords) / s.completedWords) * 100));
+            }
+            document.getElementById('hud-acc').innerText = acc + '%';
+        }
+
+        handleKey(e) {
+            if (e.key === 'Enter' && e.shiftKey) {
+                this.startGame();
+                return;
+            }
+
+            if (this.dom.result.classList.contains('visible')) {
+                if (e.key === 'Home') {
+                    this.stopGame(true);
+                }
+                return;
+            }
+
+            if (e.key === 'Enter') {
+                this.toggleGame();
+                return;
+            }
+
+            if (!this.state.running) return;
+
+            if (e.key === 'Escape') {
+                this.state.input = "";
+                this.render();
+                return;
+            }
+
+            if (e.key === ' ') {
+                e.preventDefault();
+                this.confirmAndAnimate();
+                return;
+            }
+
+            if (e.key === 'Backspace') {
+                if (this.dom.backspace.checked && this.state.input.length > 0) {
+                    const charIndex = this.state.input.length - 1;
+                    const charDeleted = this.state.input[charIndex];
+                    const charTarget = this.state.currentWord[charIndex];
+                    
+                    if (charDeleted === charTarget) {
+                        this.state.stats.correctKeystrokes--;
+                    }
+                    
+                    this.state.input = this.state.input.slice(0, -1);
+                    this.render();
+                }
+                return;
+            }
+
+            if (/^[a-zA-Z]$/.test(e.key)) {
+                const char = e.key.toLowerCase();
+                
+                if (this.state.input.length < this.state.currentWord.length) {
+                    const targetChar = this.state.currentWord[this.state.input.length];
+                    if (char === targetChar) {
+                        this.state.stats.correctKeystrokes++;
+                    }
+
+                    this.state.input += char;
+                    this.render();
+                }
+            }
+        }
+
+        confirmAndAnimate() {
+            if (this.state.input !== this.state.currentWord) {
+                this.state.stats.wrongWords++;
+            }
+
+            const ghost = this.dom.currentWord.cloneNode(true);
+            ghost.id = '';
+            ghost.className = 'ghost-word anim-slide-up';
+            this.dom.wordWrapper.appendChild(ghost);
+
+            this.nextWord();
+            this.updateStats();
+
+            setTimeout(() => {
+                ghost.remove();
+            }, 300);
+        }
+    }
+
+    const app = new App();
+    window.addEventListener('load', () => app.updateModeUI('timed'));
+    window.addEventListener('resize', () => app.updateModeUI(app.state.mode));
+
+</script>
+</body>
+</html>
